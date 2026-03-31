@@ -17,6 +17,16 @@ export default function RootLayout() {
     load();
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
+      return;
+    }
+
+    navigator.serviceWorker.register("/service-worker.js").catch((error) => {
+      console.warn("Service worker registration failed:", error);
+    });
+  }, []);
+
   if (!ready) {
     return (
       <SafeAreaView style={styles.loaderWrap}>
