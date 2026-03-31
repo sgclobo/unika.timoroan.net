@@ -1,3 +1,4 @@
+import { BRAND_LOGO } from "@/constants/branding";
 import { useAdminAuth } from "@/context/AdminAuthContext";
 import {
   createProduct,
@@ -8,6 +9,7 @@ import {
 } from "@/database/shopService";
 import { Category, Product } from "@/types/models";
 import { formatCurrency } from "@/utils/format";
+import { parseProductImages } from "@/utils/productImages";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
@@ -173,7 +175,11 @@ export default function ManageProductsScreen() {
     });
 
     if (!result.canceled) {
-      setForm((prev) => ({ ...prev, image: result.assets[0].uri }));
+      const picked = result.assets[0].uri;
+      setForm((prev) => ({
+        ...prev,
+        image: prev.image.trim() ? `${prev.image}\n${picked}` : picked,
+      }));
     }
   };
 
@@ -182,7 +188,10 @@ export default function ManageProductsScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.title}>Manage Products</Text>
+        <View style={styles.brandRow}>
+          <Image source={BRAND_LOGO} style={styles.brandLogo} />
+          <Text style={styles.title}>Manage Products</Text>
+        </View>
 
         <View style={styles.formCard}>
           <Text style={styles.sectionTitle}>Category</Text>
@@ -254,7 +263,7 @@ export default function ManageProductsScreen() {
           />
           <TextInput
             style={styles.input}
-            placeholder="Image URL (optional)"
+            placeholder="Image URLs (optional, comma or new line separated)"
             value={form.image}
             onChangeText={(value) =>
               setForm((prev) => ({ ...prev, image: value }))
@@ -265,9 +274,15 @@ export default function ManageProductsScreen() {
             <Text style={styles.imagePickerText}>Pick Image from Gallery</Text>
           </TouchableOpacity>
 
-          {form.image ? (
-            <Image source={{ uri: form.image }} style={styles.previewImage} />
-          ) : null}
+          {form.image.trim()
+            ? parseProductImages(form.image).map((image, index) => (
+                <Image
+                  key={`preview-${index}`}
+                  source={{ uri: image }}
+                  style={styles.previewImage}
+                />
+              ))
+            : null}
 
           <View style={styles.toggleRow}>
             <TouchableOpacity
@@ -358,6 +373,18 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#1F2937",
     marginBottom: 12,
+  },
+  brandRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 10,
+  },
+  brandLogo: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: "#E5E7EB",
   },
   formCard: {
     backgroundColor: "#fff",

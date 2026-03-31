@@ -2,6 +2,7 @@ import { LOW_STOCK_THRESHOLD } from "@/constants/app";
 import { useCart } from "@/context/CartContext";
 import { Product } from "@/types/models";
 import { formatCurrency } from "@/utils/format";
+import { parseProductImages } from "@/utils/productImages";
 import { Link } from "expo-router";
 import {
   Alert,
@@ -19,6 +20,7 @@ type Props = {
 
 export function ProductCard({ product, compact = false }: Props) {
   const { addItem } = useCart();
+  const images = parseProductImages(product.image);
 
   const outOfStock = product.stock <= 0;
   const lowStock = product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD;
@@ -37,6 +39,18 @@ export function ProductCard({ product, compact = false }: Props) {
 
   return (
     <View style={[styles.card, compact ? styles.compact : null]}>
+      <Image source={{ uri: images[0] }} style={styles.image} />
+      <Text style={styles.name} numberOfLines={2}>
+        {product.name}
+      </Text>
+      <Text style={styles.price}>{formatCurrency(product.price)}</Text>
+
+      <View style={styles.metaRow}>
+        {product.featured ? <Text style={styles.badge}>Featured</Text> : null}
+        {lowStock ? <Text style={styles.lowStock}>Low stock</Text> : null}
+        {outOfStock ? <Text style={styles.outStock}>Out of stock</Text> : null}
+      </View>
+
       <Link
         href={{
           pathname: "/product/[id]",
@@ -44,29 +58,8 @@ export function ProductCard({ product, compact = false }: Props) {
         }}
         asChild
       >
-        <TouchableOpacity activeOpacity={0.85}>
-          <Image
-            source={{
-              uri:
-                product.image ||
-                "https://picsum.photos/seed/fallback-product/600/600",
-            }}
-            style={styles.image}
-          />
-          <Text style={styles.name} numberOfLines={2}>
-            {product.name}
-          </Text>
-          <Text style={styles.price}>{formatCurrency(product.price)}</Text>
-
-          <View style={styles.metaRow}>
-            {product.featured ? (
-              <Text style={styles.badge}>Featured</Text>
-            ) : null}
-            {lowStock ? <Text style={styles.lowStock}>Low stock</Text> : null}
-            {outOfStock ? (
-              <Text style={styles.outStock}>Out of stock</Text>
-            ) : null}
-          </View>
+        <TouchableOpacity style={styles.viewButton}>
+          <Text style={styles.viewButtonText}>View Product</Text>
         </TouchableOpacity>
       </Link>
 
@@ -155,11 +148,25 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   addButton: {
-    marginTop: 10,
+    marginTop: 8,
     backgroundColor: "#0EA5E9",
     borderRadius: 10,
     paddingVertical: 10,
     alignItems: "center",
+  },
+  viewButton: {
+    marginTop: 10,
+    backgroundColor: "#E0F2FE",
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#7DD3FC",
+  },
+  viewButtonText: {
+    color: "#075985",
+    fontWeight: "700",
+    fontSize: 13,
   },
   addButtonDisabled: {
     backgroundColor: "#9CA3AF",

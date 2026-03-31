@@ -1,7 +1,8 @@
 import { APP_NAME } from "@/constants/app";
+import { BRAND_LOGO } from "@/constants/branding";
 import { useCart } from "@/context/CartContext";
 import { Link } from "expo-router";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 type Props = {
   title?: string;
@@ -13,9 +14,12 @@ export function AppHeader({ title = APP_NAME, subtitle }: Props) {
 
   return (
     <View style={styles.container}>
-      <View>
-        <Text style={styles.title}>{title}</Text>
-        {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+      <View style={styles.brandWrap}>
+        <Image source={BRAND_LOGO} style={styles.logo} />
+        <View>
+          <Text style={styles.title}>{title}</Text>
+          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+        </View>
       </View>
 
       <Link href="/(tabs)/cart" asChild>
@@ -33,6 +37,19 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 14,
+  },
+  brandWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+    paddingRight: 10,
+  },
+  logo: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "#E5E7EB",
   },
   title: {
     fontSize: 22,

@@ -2,12 +2,14 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { SearchBar } from "@/components/common/SearchBar";
 import { CategoryChip } from "@/components/shop/CategoryChip";
 import { ProductCard } from "@/components/shop/ProductCard";
+import { BRAND_LOGO } from "@/constants/branding";
 import { getCategories, getProducts } from "@/database/shopService";
 import { Category, Product } from "@/types/models";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -59,7 +61,10 @@ export default function ShopScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        <Text style={styles.title}>Shop</Text>
+        <View style={styles.brandRow}>
+          <Image source={BRAND_LOGO} style={styles.logo} />
+          <Text style={styles.title}>Shop</Text>
+        </View>
         <SearchBar value={search} onChangeText={setSearch} />
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -143,7 +148,19 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "700",
     color: "#1F2937",
+    marginBottom: 0,
+  },
+  brandRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
     marginBottom: 12,
+  },
+  logo: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: "#E5E7EB",
   },
   sortRow: {
     marginTop: 10,

@@ -1,7 +1,9 @@
+import { BRAND_LOGO } from "@/constants/branding";
 import { useCart } from "@/context/CartContext";
 import { getProductById } from "@/database/shopService";
 import { Product } from "@/types/models";
 import { formatCurrency } from "@/utils/format";
+import { parseProductImages } from "@/utils/productImages";
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -23,6 +25,7 @@ export default function ProductDetailsScreen() {
   const [loading, setLoading] = useState(true);
   const [product, setProduct] = useState<Product | null>(null);
   const [quantity, setQuantity] = useState(1);
+  const [activeImage, setActiveImage] = useState(0);
 
   useEffect(() => {
     const load = async () => {
@@ -30,6 +33,7 @@ export default function ProductDetailsScreen() {
       setLoading(true);
       const item = await getProductById(Number(id));
       setProduct(item);
+      setActiveImage(0);
       setLoading(false);
     };
     load();
@@ -71,18 +75,41 @@ export default function ProductDetailsScreen() {
   }
 
   const outOfStock = product.stock <= 0;
+  const images = parseProductImages(product.image);
+  const heroImage = images[activeImage] ?? images[0];
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container}>
-        <Image
-          source={{
-            uri:
-              product.image ||
-              "https://picsum.photos/seed/product-detail/800/800",
-          }}
-          style={styles.image}
-        />
+        <View style={styles.brandRow}>
+          <Image source={BRAND_LOGO} style={styles.brandLogo} />
+          <Text style={styles.brandText}>Unika Online</Text>
+        </View>
+
+        <Image source={{ uri: heroImage }} style={styles.image} />
+        {images.length > 1 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.thumbRow}
+          >
+            {images.map((image, index) => {
+              const active = index === activeImage;
+              return (
+                <TouchableOpacity
+                  key={`${product.id}-${index}`}
+                  style={[
+                    styles.thumbWrap,
+                    active ? styles.thumbWrapActive : null,
+                  ]}
+                  onPress={() => setActiveImage(index)}
+                >
+                  <Image source={{ uri: image }} style={styles.thumbImage} />
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        ) : null}
 
         <Text style={styles.name}>{product.name}</Text>
         <Text style={styles.category}>{product.category_name}</Text>
@@ -135,6 +162,23 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 30,
   },
+  brandRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+    gap: 8,
+  },
+  brandLogo: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: "#E5E7EB",
+  },
+  brandText: {
+    color: "#075985",
+    fontWeight: "700",
+    fontSize: 13,
+  },
   title: {
     fontSize: 22,
     fontWeight: "700",
@@ -144,7 +188,26 @@ const styles = StyleSheet.create({
     width: "100%",
     height: 300,
     borderRadius: 14,
-    marginBottom: 12,
+    marginBottom: 10,
+    backgroundColor: "#E5E7EB",
+  },
+  thumbRow: {
+    marginBottom: 8,
+  },
+  thumbWrap: {
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    borderRadius: 10,
+    padding: 2,
+  },
+  thumbWrapActive: {
+    borderColor: "#0284C7",
+  },
+  thumbImage: {
+    width: 66,
+    height: 66,
+    borderRadius: 8,
     backgroundColor: "#E5E7EB",
   },
   name: {
@@ -164,7 +227,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   description: {
-    marginTop: 10,
+    marginTop: 8,
     color: "#374151",
     lineHeight: 22,
   },
