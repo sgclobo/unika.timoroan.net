@@ -1,5 +1,6 @@
 import { EmptyState } from "@/components/common/EmptyState";
 import { useCart } from "@/context/CartContext";
+import { getPendingOrderIntentCount } from "@/database/shopService";
 import { formatCurrency } from "@/utils/format";
 import { Link } from "expo-router";
 import {
@@ -15,6 +16,7 @@ import {
 
 export default function CartScreen() {
   const { cartItems, cartTotal, updateItemQty, removeItem } = useCart();
+  const pendingQueueCount = getPendingOrderIntentCount();
 
   const onUpdateQty = async (productId: number, quantity: number) => {
     try {
@@ -36,6 +38,15 @@ export default function CartScreen() {
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.title}>Shopping Cart</Text>
+
+        {pendingQueueCount > 0 ? (
+          <View style={styles.queueNotice}>
+            <Text style={styles.queueNoticeText}>
+              {pendingQueueCount} queued order{pendingQueueCount > 1 ? "s" : ""}{" "}
+              will sync when you are online.
+            </Text>
+          </View>
+        ) : null}
 
         {cartItems.length === 0 ? (
           <EmptyState
@@ -138,6 +149,18 @@ const styles = StyleSheet.create({
     padding: 10,
     marginBottom: 10,
     gap: 10,
+  },
+  queueNotice: {
+    backgroundColor: "#FEF3C7",
+    borderWidth: 1,
+    borderColor: "#FCD34D",
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 10,
+  },
+  queueNoticeText: {
+    color: "#92400E",
+    fontWeight: "600",
   },
   image: {
     width: 86,

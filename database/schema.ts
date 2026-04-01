@@ -8,6 +8,10 @@ import {
 } from "@/database/runtime";
 
 export async function initDatabase() {
+  if (typeof window === "undefined") {
+    // Skip database init during server-side rendering/static generation
+    return;
+  }
   try {
     const db = await getDb();
 

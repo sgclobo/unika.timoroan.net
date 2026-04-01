@@ -1,49 +1,59 @@
-import { AppHeader } from "@/components/common/AppHeader";
-import { EmptyState } from "@/components/common/EmptyState";
-import { SearchBar } from "@/components/common/SearchBar";
-import { CategoryChip } from "@/components/shop/CategoryChip";
-import { ProductCard } from "@/components/shop/ProductCard";
-import { getCategories, getProducts } from "@/database/shopService";
-import { Category, Product } from "@/types/models";
-import { Link } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { AppHeader } from "@/components/common/AppHeader";
+import { SearchBar } from "@/components/common/SearchBar";
+import { ProductCard } from "@/components/shop/ProductCard";
+import { CategoryChip } from "@/components/shop/CategoryChip";
+import { EmptyState } from "@/components/common/EmptyState";
+import { useEffect, useState, useMemo } from "react";
+import { getProducts, getCategories } from "@/database/shopService";
+import { Product, Category } from "@/types/models";
+import { Link } from "expo-router";
 
 export default function HomeScreen() {
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      const [cats, featured] = await Promise.all([
-        getCategories(),
-        getProducts({ featuredOnly: true, search }),
-      ]);
+    async function loadData() {
+      try {
+        const [prodData, catData] = await Promise.all([
+          getProducts(),
+          getCategories(),
+        ]);
+        setProducts(prodData);
+        setCategories(catData);
+      } catch (error) {
+        console.error("Error loading home data:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, []);
 
-      setCategories(cats);
-      setFeaturedProducts(featured);
-      setLoading(false);
-    };
-
-    load();
-  }, [search]);
+  const featuredProducts = useMemo(() => {
+    return products
+      .filter((p) => p.featured === 1)
+      .filter((p) =>
+        p.name.toLowerCase().includes(search.toLowerCase()) ||
+        p.description.toLowerCase().includes(search.toLowerCase())
+      );
+  }, [products, search]);
 
   const previewCategories = useMemo(() => categories.slice(0, 5), [categories]);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container}>
         <AppHeader subtitle="Discover featured picks and latest deals" />
         <SearchBar
@@ -82,7 +92,7 @@ export default function HomeScreen() {
           <Text style={styles.sectionTitle}>Category Preview</Text>
         </View>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catScroll}>
           {previewCategories.map((category) => (
             <CategoryChip
               key={category.id}
@@ -99,7 +109,7 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </Link>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -110,34 +120,44 @@ const styles = StyleSheet.create({
   },
   container: {
     padding: 16,
-    paddingBottom: 24,
+    paddingBottom: 100, // Account for custom tab bar
   },
   sectionHeader: {
-    marginTop: 12,
-    marginBottom: 10,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    marginTop: 24,
+    marginBottom: 16,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "700",
     color: "#1F2937",
   },
   linkText: {
     color: "#0EA5E9",
-    fontWeight: "700",
-    fontSize: 13,
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  catScroll: {
+    paddingBottom: 8,
   },
   shopButton: {
-    marginTop: 20,
-    backgroundColor: "#0F766E",
+    backgroundColor: "#0EA5E9",
+    padding: 16,
     borderRadius: 12,
-    paddingVertical: 14,
     alignItems: "center",
+    marginTop: 32,
+    marginBottom: 20,
+    shadowColor: "#0EA5E9",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   shopButtonText: {
     color: "#fff",
+    fontSize: 16,
     fontWeight: "700",
   },
 });

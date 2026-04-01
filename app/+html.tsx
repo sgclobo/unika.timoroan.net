@@ -1,36 +1,33 @@
-import { Head, Html, Main, NextScript } from "expo-router/html";
+import { ScrollViewStyleReset } from "expo-router/html";
+import { type PropsWithChildren } from "react";
 
-export default function Document() {
+export default function Root({ children }: PropsWithChildren) {
   return (
-    <Html lang="en">
-      <Head>
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="Unika Online" />
-        <meta name="theme-color" content="#ffffff" />
-        <link rel="manifest" href="/assets/images/site.webmanifest" />
-        <link
-          rel="icon"
-          type="image/png"
-          href="/assets/images/favicon-96x96.png"
-          sizes="96x96"
+    <html lang="en">
+      <head>
+        <meta charSet="utf-8" />
+        <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1, shrink-to-fit=no"
         />
-        <link
-          rel="icon"
-          type="image/svg+xml"
-          href="/assets/images/favicon.svg"
-        />
-        <link rel="shortcut icon" href="/assets/images/favicon.ico" />
-        <link
-          rel="apple-touch-icon"
-          sizes="180x180"
-          href="/assets/images/apple-touch-icon.png"
-        />
-      </Head>
+        <ScrollViewStyleReset />
+        <style dangerouslySetInnerHTML={{ __html: responsiveBackground }} />
+      </head>
       <body>
-        <Main />
-        <NextScript />
+        <div id="root">{children}</div>
       </body>
-    </Html>
+    </html>
   );
 }
+
+const responsiveBackground = `
+  html, body, #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    background-color: #F3F4F6;
+  }
+`;

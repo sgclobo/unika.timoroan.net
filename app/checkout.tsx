@@ -1,6 +1,6 @@
 import { PAYMENT_INSTRUCTIONS, PAYMENT_METHODS } from "@/constants/payments";
 import { useCart } from "@/context/CartContext";
-import { placeOrder } from "@/database/shopService";
+import { getPendingOrderIntentCount, placeOrder } from "@/database/shopService";
 import { PaymentMethod } from "@/types/models";
 import { formatCurrency } from "@/utils/format";
 import { isPhoneValid, isRequired } from "@/utils/validators";
@@ -24,6 +24,7 @@ export default function CheckoutScreen() {
   const [customerAddress, setCustomerAddress] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("COD");
   const [submitting, setSubmitting] = useState(false);
+  const pendingQueueCount = getPendingOrderIntentCount();
 
   const onPlaceOrder = async () => {
     if (
@@ -47,7 +48,7 @@ export default function CheckoutScreen() {
 
     try {
       setSubmitting(true);
-      const orderNumber = await placeOrder({
+      const result = await placeOrder({
         customerName,
         customerPhone,
         customerAddress,
@@ -55,10 +56,24 @@ export default function CheckoutScreen() {
       });
 
       await refreshCart();
-      router.replace({
-        pathname: "/order-confirmation/[orderNumber]",
-        params: { orderNumber },
-      });
+
+      if (result.status === "placed") {
+        router.replace({
+          pathname: "/order-confirmation/[orderNumber]",
+          params: { orderNumber: result.orderNumber },
+        });
+      } else {
+        Alert.alert(
+          "Queued Offline",
+          "You are offline. Your order has been queued and will sync automatically when connection is restored.",
+          [
+            {
+              text: "OK",
+              onPress: () => router.replace("/(tabs)/orders"),
+            },
+          ],
+        );
+      }
     } catch (error) {
       Alert.alert(
         "Checkout",
@@ -73,6 +88,15 @@ export default function CheckoutScreen() {
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.title}>Checkout</Text>
+
+        {pendingQueueCount > 0 ? (
+          <View style={styles.offlineNotice}>
+            <Text style={styles.offlineNoticeText}>
+              {pendingQueueCount} queued order{pendingQueueCount > 1 ? "s" : ""}{" "}
+              waiting for sync.
+            </Text>
+          </View>
+        ) : null}
 
         <TextInput
           style={styles.input}
@@ -185,6 +209,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 11,
     marginBottom: 10,
+  },
+  offlineNotice: {
+    backgroundColor: "#FEF3C7",
+    borderWidth: 1,
+    borderColor: "#FCD34D",
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 10,
+  },
+  offlineNoticeText: {
+    color: "#92400E",
+    fontWeight: "600",
   },
   multiline: {
     minHeight: 90,

@@ -1,6 +1,10 @@
 {
+  "id": "/",
   "name": "Unika Online",
   "short_name": "UNO",
+  "description": "Unika Online shopping app with offline-ready browsing.",
+  "start_url": "/",
+  "scope": "/",
   "icons": [
     {
       "src": "/assets/images/web-app-manifest-192x192.png",
@@ -17,5 +21,6 @@
   ],
   "theme_color": "#ffffff",
   "background_color": "#ffffff",
-  "display": "standalone"
+  "display": "standalone",
+  "orientation": "portrait"
 }

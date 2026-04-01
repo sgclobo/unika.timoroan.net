@@ -1,79 +1,63 @@
 import { AdminAuthProvider } from "@/context/AdminAuthContext";
 import { CartProvider } from "@/context/CartContext";
-import { initDatabase } from "@/database/schema";
 import { Stack } from "expo-router";
-import { useEffect, useState } from "react";
-import { ActivityIndicator, SafeAreaView, StyleSheet } from "react-native";
+import * as SplashScreen from "expo-splash-screen";
+import { StatusBar } from "expo-status-bar";
+import { useEffect } from "react";
+import { Platform, StyleSheet, View } from "react-native";
+import "react-native-reanimated";
+
+// REBUILD_ID: 1775028680
+SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const [ready, setReady] = useState(false);
-
   useEffect(() => {
-    const load = async () => {
-      await initDatabase();
-      setReady(true);
-    };
-
-    load();
+    SplashScreen.hideAsync();
   }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
-      return;
-    }
-
-    navigator.serviceWorker.register("/service-worker.js").catch((error) => {
-      console.warn("Service worker registration failed:", error);
-    });
-  }, []);
-
-  if (!ready) {
-    return (
-      <SafeAreaView style={styles.loaderWrap}>
-        <ActivityIndicator size="large" color="#0EA5E9" />
-      </SafeAreaView>
-    );
-  }
 
   return (
-    <AdminAuthProvider>
-      <CartProvider>
-        <Stack>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen
-            name="product/[id]"
-            options={{ title: "Product Details" }}
-          />
-          <Stack.Screen name="checkout" options={{ title: "Checkout" }} />
-          <Stack.Screen
-            name="order-confirmation/[orderNumber]"
-            options={{ title: "Order Confirmation" }}
-          />
-          <Stack.Screen name="admin/login" options={{ title: "Admin Login" }} />
-          <Stack.Screen
-            name="admin/dashboard"
-            options={{ title: "Admin Dashboard" }}
-          />
-          <Stack.Screen
-            name="admin/categories"
-            options={{ title: "Manage Categories" }}
-          />
-          <Stack.Screen
-            name="admin/products"
-            options={{ title: "Manage Products" }}
-          />
-          <Stack.Screen name="admin/orders" options={{ title: "Orders" }} />
-        </Stack>
-      </CartProvider>
-    </AdminAuthProvider>
+    <View style={styles.container}>
+      <AdminAuthProvider>
+        <CartProvider>
+          <Stack screenOptions={{ headerShown: false, contentStyle: { flex: 1, backgroundColor: "#F3F4F6" } }}>
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen
+              name="product/[id]"
+              options={{ title: "Product Details", headerShown: true }}
+            />
+            <Stack.Screen name="checkout" options={{ title: "Checkout", headerShown: true }} />
+            <Stack.Screen
+              name="order-confirmation/[orderNumber]"
+              options={{ title: "Order Confirmation", headerShown: true }}
+            />
+            <Stack.Screen name="admin/login" options={{ title: "Admin Login", headerShown: true }} />
+            <Stack.Screen
+              name="admin/dashboard"
+              options={{ title: "Admin Dashboard", headerShown: true }}
+            />
+            <Stack.Screen
+              name="admin/categories"
+              options={{ title: "Manage Categories", headerShown: true }}
+            />
+            <Stack.Screen
+              name="admin/products"
+              options={{ title: "Manage Products", headerShown: true }}
+            />
+            <Stack.Screen name="admin/orders" options={{ title: "Orders", headerShown: true }} />
+          </Stack>
+          <StatusBar style="auto" />
+        </CartProvider>
+      </AdminAuthProvider>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  loaderWrap: {
+  container: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
+    height: "100%",
     backgroundColor: "#F3F4F6",
+    // @ts-ignore - web only property
+    minHeight: Platform.OS === "web" ? "100vh" : undefined,
   },
 });

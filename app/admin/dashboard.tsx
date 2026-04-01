@@ -1,6 +1,6 @@
 import { useAdminAuth } from "@/context/AdminAuthContext";
 import { getDashboardStats } from "@/database/shopService";
-import { Link, router } from "expo-router";
+import { Link, router, useRootNavigationState } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -13,6 +13,7 @@ import {
 
 export default function AdminDashboardScreen() {
   const { adminUser, logout } = useAdminAuth();
+  const rootNavigationState = useRootNavigationState();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     totalCategories: 0,
@@ -22,6 +23,9 @@ export default function AdminDashboardScreen() {
   });
 
   useEffect(() => {
+    // Wait for the root navigator to be mounted before redirecting.
+    if (!rootNavigationState?.key) return;
+
     if (!adminUser) {
       router.replace("/admin/login");
       return;
@@ -35,7 +39,7 @@ export default function AdminDashboardScreen() {
     };
 
     load();
-  }, [adminUser]);
+  }, [adminUser, rootNavigationState?.key]);
 
   const onLogout = () => {
     logout();

@@ -35,21 +35,191 @@ import {
   Product,
 } from "@/types/models";
 
-export async function getCategories(): Promise<Category[]> {
-  if (isMemoryFallbackEnabled()) return getCategoriesMemory();
-  const db = await getDb();
-  return db.getAllAsync<Category>(
-    "SELECT * FROM categories ORDER BY name COLLATE NOCASE ASC",
+const SNAPSHOT_VERSION = "v1";
+const SNAPSHOT_KEYS = {
+  categories: `unika.catalog.categories.${SNAPSHOT_VERSION}`,
+  productsLatest: `unika.catalog.products.latest.${SNAPSHOT_VERSION}`,
+  productById: `unika.catalog.product.by-id.${SNAPSHOT_VERSION}`,
+  cartItems: `unika.cart.items.${SNAPSHOT_VERSION}`,
+  pendingOrderIntents: `unika.checkout.pending-intents.${SNAPSHOT_VERSION}`,
+};
+
+type CheckoutCartLine = {
+  productId: number;
+  productName: string;
+  productPrice: number;
+  quantity: number;
+};
+
+type PendingOrderIntent = {
+  id: string;
+  createdAt: string;
+  payload: CheckoutPayload;
+  items: CheckoutCartLine[];
+};
+
+export type PlaceOrderResult =
+  | { status: "placed"; orderNumber: string }
+  | { status: "queued"; intentId: string };
+
+function canUseNavigator() {
+  return typeof navigator !== "undefined";
+}
+
+function isOfflineNow() {
+  return canUseNavigator() && navigator.onLine === false;
+}
+
+function toCheckoutLines(items: CartItem[]): CheckoutCartLine[] {
+  return items.map((item) => ({
+    productId: item.product_id,
+    productName: item.product_name,
+    productPrice: item.product_price,
+    quantity: item.quantity,
+  }));
+}
+
+function getPendingOrderIntents() {
+  return (
+    readSnapshot<PendingOrderIntent[]>(SNAPSHOT_KEYS.pendingOrderIntents) ?? []
   );
 }
 
-export async function createCategory(name: string, description: string) {
-  if (isMemoryFallbackEnabled()) return createCategoryMemory(name, description);
-  const db = await getDb();
-  await db.runAsync(
-    "INSERT INTO categories (name, description) VALUES (?, ?)",
-    [name.trim(), description.trim() || null],
+function writePendingOrderIntents(intents: PendingOrderIntent[]) {
+  writeSnapshot(SNAPSHOT_KEYS.pendingOrderIntents, intents);
+}
+
+function queueOrderIntent(payload: CheckoutPayload, items: CartItem[]) {
+  const intent: PendingOrderIntent = {
+    id: `qi-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    createdAt: new Date().toISOString(),
+    payload,
+    items: toCheckoutLines(items),
+  };
+
+  const current = getPendingOrderIntents();
+  writePendingOrderIntents([...current, intent]);
+  return intent.id;
+}
+
+function isQueueableCheckoutError(error: unknown) {
+  if (!canUseWebStorage()) return false;
+  if (isOfflineNow()) return true;
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("network") ||
+    message.includes("offline") ||
+    message.includes("failed")
   );
+}
+
+function canUseWebStorage() {
+  return typeof window !== "undefined" && typeof localStorage !== "undefined";
+}
+
+function readSnapshot<T>(key: string): T | null {
+  if (!canUseWebStorage()) return null;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+function writeSnapshot<T>(key: string, value: T) {
+  if (!canUseWebStorage()) return;
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Ignore snapshot write failures in low-storage environments.
+  }
+}
+
+function mergeProductByIdSnapshot(products: Product[]) {
+  const current =
+    readSnapshot<Record<string, Product>>(SNAPSHOT_KEYS.productById) ?? {};
+  const merged = { ...current };
+  for (const product of products) {
+    merged[String(product.id)] = product;
+  }
+  writeSnapshot(SNAPSHOT_KEYS.productById, merged);
+}
+
+function normalizeSearchTerm(value?: string) {
+  return value?.trim().toLowerCase() ?? "";
+}
+
+function applyProductFilters(rows: Product[], filters: ProductFilters = {}) {
+  let filtered = [...rows].filter((row) => row.status === "active");
+
+  if (filters.categoryId) {
+    filtered = filtered.filter((row) => row.category_id === filters.categoryId);
+  }
+
+  const searchTerm = normalizeSearchTerm(filters.search);
+  if (searchTerm) {
+    filtered = filtered.filter((row) =>
+      row.name.toLowerCase().includes(searchTerm),
+    );
+  }
+
+  if (filters.featuredOnly) {
+    filtered = filtered.filter((row) => row.featured === 1);
+  }
+
+  if (filters.sortBy === "priceAsc") {
+    return filtered.sort((a, b) => a.price - b.price);
+  }
+
+  if (filters.sortBy === "priceDesc") {
+    return filtered.sort((a, b) => b.price - a.price);
+  }
+
+  return filtered.sort((a, b) => b.created_at.localeCompare(a.created_at));
+}
+
+function clearCatalogSnapshots() {
+  if (!canUseWebStorage()) return;
+  localStorage.removeItem(SNAPSHOT_KEYS.categories);
+  localStorage.removeItem(SNAPSHOT_KEYS.productsLatest);
+  localStorage.removeItem(SNAPSHOT_KEYS.productById);
+}
+
+export async function getCategories(): Promise<Category[]> {
+  try {
+    const rows = isMemoryFallbackEnabled()
+      ? await getCategoriesMemory()
+      : await (
+          await getDb()
+        ).getAllAsync<Category>(
+          "SELECT * FROM categories ORDER BY name COLLATE NOCASE ASC",
+        );
+
+    writeSnapshot(SNAPSHOT_KEYS.categories, rows);
+    return rows;
+  } catch (error) {
+    const cached = readSnapshot<Category[]>(SNAPSHOT_KEYS.categories);
+    if (cached && cached.length > 0) {
+      return cached;
+    }
+    throw error;
+  }
+}
+
+export async function createCategory(name: string, description: string) {
+  if (isMemoryFallbackEnabled()) {
+    await createCategoryMemory(name, description);
+  } else {
+    const db = await getDb();
+    await db.runAsync(
+      "INSERT INTO categories (name, description) VALUES (?, ?)",
+      [name.trim(), description.trim() || null],
+    );
+  }
+  clearCatalogSnapshots();
 }
 
 export async function updateCategory(
@@ -58,19 +228,25 @@ export async function updateCategory(
   description: string,
 ) {
   if (isMemoryFallbackEnabled()) {
-    return updateCategoryMemory(id, name, description);
+    await updateCategoryMemory(id, name, description);
+  } else {
+    const db = await getDb();
+    await db.runAsync(
+      "UPDATE categories SET name = ?, description = ? WHERE id = ?",
+      [name.trim(), description.trim() || null, id],
+    );
   }
-  const db = await getDb();
-  await db.runAsync(
-    "UPDATE categories SET name = ?, description = ? WHERE id = ?",
-    [name.trim(), description.trim() || null, id],
-  );
+  clearCatalogSnapshots();
 }
 
 export async function deleteCategory(id: number) {
-  if (isMemoryFallbackEnabled()) return deleteCategoryMemory(id);
-  const db = await getDb();
-  await db.runAsync("DELETE FROM categories WHERE id = ?", [id]);
+  if (isMemoryFallbackEnabled()) {
+    await deleteCategoryMemory(id);
+  } else {
+    const db = await getDb();
+    await db.runAsync("DELETE FROM categories WHERE id = ?", [id]);
+  }
+  clearCatalogSnapshots();
 }
 
 type ProductFilters = {
@@ -83,59 +259,103 @@ type ProductFilters = {
 export async function getProducts(
   filters: ProductFilters = {},
 ): Promise<Product[]> {
-  if (isMemoryFallbackEnabled()) return getProductsMemory(filters);
-  const db = await getDb();
+  try {
+    if (isMemoryFallbackEnabled()) {
+      const rows = await getProductsMemory(filters);
+      writeSnapshot(SNAPSHOT_KEYS.productsLatest, rows);
+      mergeProductByIdSnapshot(rows);
+      return rows;
+    }
 
-  const whereClauses: string[] = ["p.status = 'active'"];
-  const params: (string | number)[] = [];
+    const db = await getDb();
 
-  if (filters.categoryId) {
-    whereClauses.push("p.category_id = ?");
-    params.push(filters.categoryId);
-  }
+    const whereClauses: string[] = ["p.status = 'active'"];
+    const params: (string | number)[] = [];
 
-  if (filters.search?.trim()) {
-    whereClauses.push("LOWER(p.name) LIKE ?");
-    params.push(`%${filters.search.trim().toLowerCase()}%`);
-  }
+    if (filters.categoryId) {
+      whereClauses.push("p.category_id = ?");
+      params.push(filters.categoryId);
+    }
 
-  if (filters.featuredOnly) {
-    whereClauses.push("p.featured = 1");
-  }
+    if (filters.search?.trim()) {
+      whereClauses.push("LOWER(p.name) LIKE ?");
+      params.push(`%${filters.search.trim().toLowerCase()}%`);
+    }
 
-  let orderBy = "p.created_at DESC";
-  if (filters.sortBy === "priceAsc") orderBy = "p.price ASC";
-  if (filters.sortBy === "priceDesc") orderBy = "p.price DESC";
+    if (filters.featuredOnly) {
+      whereClauses.push("p.featured = 1");
+    }
 
-  const query = `
-    SELECT
-      p.*,
-      c.name as category_name
-    FROM products p
-    INNER JOIN categories c ON c.id = p.category_id
-    WHERE ${whereClauses.join(" AND ")}
-    ORDER BY ${orderBy}
-  `;
+    let orderBy = "p.created_at DESC";
+    if (filters.sortBy === "priceAsc") orderBy = "p.price ASC";
+    if (filters.sortBy === "priceDesc") orderBy = "p.price DESC";
 
-  return db.getAllAsync<Product>(query, params);
-}
-
-export async function getProductById(id: number): Promise<Product | null> {
-  if (isMemoryFallbackEnabled()) return getProductByIdMemory(id);
-  const db = await getDb();
-  const row = await db.getFirstAsync<Product>(
-    `
+    const query = `
       SELECT
         p.*,
         c.name as category_name
       FROM products p
       INNER JOIN categories c ON c.id = p.category_id
-      WHERE p.id = ?
-    `,
-    [id],
-  );
+      WHERE ${whereClauses.join(" AND ")}
+      ORDER BY ${orderBy}
+    `;
 
-  return row ?? null;
+    const rows = await db.getAllAsync<Product>(query, params);
+    writeSnapshot(SNAPSHOT_KEYS.productsLatest, rows);
+    mergeProductByIdSnapshot(rows);
+    return rows;
+  } catch (error) {
+    const latest = readSnapshot<Product[]>(SNAPSHOT_KEYS.productsLatest);
+    if (latest && latest.length > 0) {
+      return applyProductFilters(latest, filters);
+    }
+    throw error;
+  }
+}
+
+export async function getProductById(id: number): Promise<Product | null> {
+  try {
+    if (isMemoryFallbackEnabled()) {
+      const row = await getProductByIdMemory(id);
+      if (row) {
+        mergeProductByIdSnapshot([row]);
+      }
+      return row;
+    }
+
+    const db = await getDb();
+    const row = await db.getFirstAsync<Product>(
+      `
+        SELECT
+          p.*,
+          c.name as category_name
+        FROM products p
+        INNER JOIN categories c ON c.id = p.category_id
+        WHERE p.id = ?
+      `,
+      [id],
+    );
+
+    if (row) {
+      mergeProductByIdSnapshot([row]);
+    }
+
+    return row ?? null;
+  } catch (error) {
+    const byId = readSnapshot<Record<string, Product>>(
+      SNAPSHOT_KEYS.productById,
+    );
+    if (byId?.[String(id)]) {
+      return byId[String(id)];
+    }
+
+    const latest = readSnapshot<Product[]>(SNAPSHOT_KEYS.productsLatest);
+    if (latest) {
+      return latest.find((row) => row.id === id) ?? null;
+    }
+
+    throw error;
+  }
 }
 
 export async function createProduct(input: {
@@ -147,24 +367,28 @@ export async function createProduct(input: {
   stock: number;
   featured: boolean;
 }) {
-  if (isMemoryFallbackEnabled()) return createProductMemory(input);
-  const db = await getDb();
-  await db.runAsync(
-    `
-      INSERT INTO products
-      (category_id, name, description, price, image, stock, featured, status, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'active', CURRENT_TIMESTAMP)
-    `,
-    [
-      input.categoryId,
-      input.name.trim(),
-      input.description.trim(),
-      input.price,
-      input.image.trim() || null,
-      input.stock,
-      input.featured ? 1 : 0,
-    ],
-  );
+  if (isMemoryFallbackEnabled()) {
+    await createProductMemory(input);
+  } else {
+    const db = await getDb();
+    await db.runAsync(
+      `
+        INSERT INTO products
+        (category_id, name, description, price, image, stock, featured, status, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'active', CURRENT_TIMESTAMP)
+      `,
+      [
+        input.categoryId,
+        input.name.trim(),
+        input.description.trim(),
+        input.price,
+        input.image.trim() || null,
+        input.stock,
+        input.featured ? 1 : 0,
+      ],
+    );
+  }
+  clearCatalogSnapshots();
 }
 
 export async function updateProduct(
@@ -180,51 +404,72 @@ export async function updateProduct(
     status: "active" | "inactive";
   },
 ) {
-  if (isMemoryFallbackEnabled()) return updateProductMemory(id, input);
-  const db = await getDb();
-  await db.runAsync(
-    `
-      UPDATE products
-      SET category_id = ?, name = ?, description = ?, price = ?, image = ?, stock = ?,
-          featured = ?, status = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `,
-    [
-      input.categoryId,
-      input.name.trim(),
-      input.description.trim(),
-      input.price,
-      input.image.trim() || null,
-      input.stock,
-      input.featured ? 1 : 0,
-      input.status,
-      id,
-    ],
-  );
+  if (isMemoryFallbackEnabled()) {
+    await updateProductMemory(id, input);
+  } else {
+    const db = await getDb();
+    await db.runAsync(
+      `
+        UPDATE products
+        SET category_id = ?, name = ?, description = ?, price = ?, image = ?, stock = ?,
+            featured = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `,
+      [
+        input.categoryId,
+        input.name.trim(),
+        input.description.trim(),
+        input.price,
+        input.image.trim() || null,
+        input.stock,
+        input.featured ? 1 : 0,
+        input.status,
+        id,
+      ],
+    );
+  }
+  clearCatalogSnapshots();
 }
 
 export async function deleteProduct(id: number) {
-  if (isMemoryFallbackEnabled()) return deleteProductMemory(id);
-  const db = await getDb();
-  await db.runAsync("DELETE FROM products WHERE id = ?", [id]);
+  if (isMemoryFallbackEnabled()) {
+    await deleteProductMemory(id);
+  } else {
+    const db = await getDb();
+    await db.runAsync("DELETE FROM products WHERE id = ?", [id]);
+  }
+  clearCatalogSnapshots();
 }
 
 export async function getCartItems(): Promise<CartItem[]> {
-  if (isMemoryFallbackEnabled()) return getCartItemsMemory();
-  const db = await getDb();
-  return db.getAllAsync<CartItem>(
-    `
-      SELECT
-        ci.*,
-        p.name as product_name,
-        p.price as product_price,
-        p.image as product_image,
-        p.stock as product_stock
-      FROM cart_items ci
-      INNER JOIN products p ON p.id = ci.product_id
-      ORDER BY ci.created_at DESC
-    `,
-  );
+  try {
+    const rows = isMemoryFallbackEnabled()
+      ? await getCartItemsMemory()
+      : await (
+          await getDb()
+        ).getAllAsync<CartItem>(
+          `
+            SELECT
+              ci.*,
+              p.name as product_name,
+              p.price as product_price,
+              p.image as product_image,
+              p.stock as product_stock
+            FROM cart_items ci
+            INNER JOIN products p ON p.id = ci.product_id
+            ORDER BY ci.created_at DESC
+          `,
+        );
+
+    writeSnapshot(SNAPSHOT_KEYS.cartItems, rows);
+    return rows;
+  } catch (error) {
+    const cached = readSnapshot<CartItem[]>(SNAPSHOT_KEYS.cartItems);
+    if (cached) {
+      return cached;
+    }
+    throw error;
+  }
 }
 
 export async function addToCart(productId: number, quantity: number) {
@@ -263,6 +508,8 @@ export async function addToCart(productId: number, quantity: number) {
       [productId, quantity],
     );
   }
+
+  writeSnapshot(SNAPSHOT_KEYS.cartItems, await getCartItems());
 }
 
 export async function updateCartItemQuantity(
@@ -292,35 +539,36 @@ export async function updateCartItemQuantity(
     quantity,
     productId,
   ]);
+
+  writeSnapshot(SNAPSHOT_KEYS.cartItems, await getCartItems());
 }
 
 export async function removeCartItem(productId: number) {
   if (isMemoryFallbackEnabled()) return removeCartItemMemory(productId);
   const db = await getDb();
   await db.runAsync("DELETE FROM cart_items WHERE product_id = ?", [productId]);
+  writeSnapshot(SNAPSHOT_KEYS.cartItems, await getCartItems());
 }
 
 export async function clearCart() {
   if (isMemoryFallbackEnabled()) return clearCartMemory();
   const db = await getDb();
   await db.runAsync("DELETE FROM cart_items");
+  writeSnapshot<CartItem[]>(SNAPSHOT_KEYS.cartItems, []);
 }
 
-export async function placeOrder(payload: CheckoutPayload) {
-  if (isMemoryFallbackEnabled()) return placeOrderMemory(payload);
+async function placeOrderInDb(
+  payload: CheckoutPayload,
+  items: CheckoutCartLine[],
+  options: { clearCartAfterPlace: boolean },
+) {
   const db = await getDb();
-  const cartItems = await getCartItems();
-
-  if (cartItems.length === 0) {
-    throw new Error("Your cart is empty.");
-  }
-
-  const subtotal = cartItems.reduce(
-    (sum, item) => sum + item.product_price * item.quantity,
+  const subtotal = items.reduce(
+    (sum, item) => sum + item.productPrice * item.quantity,
     0,
   );
   const total = subtotal;
-  const orderNumber = `ORD-${Date.now()}`;
+  const orderNumber = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
@@ -356,8 +604,19 @@ export async function placeOrder(payload: CheckoutPayload) {
       throw new Error("Order creation failed.");
     }
 
-    for (const item of cartItems) {
-      const lineTotal = item.product_price * item.quantity;
+    for (const item of items) {
+      const product = await db.getFirstAsync<{ stock: number }>(
+        "SELECT stock FROM products WHERE id = ?",
+        [item.productId],
+      );
+
+      if (!product || product.stock < item.quantity) {
+        throw new Error(
+          `Product stock is insufficient for ${item.productName}.`,
+        );
+      }
+
+      const lineTotal = item.productPrice * item.quantity;
 
       await db.runAsync(
         `
@@ -372,9 +631,9 @@ export async function placeOrder(payload: CheckoutPayload) {
         `,
         [
           order.id,
-          item.product_id,
-          item.product_name,
-          item.product_price,
+          item.productId,
+          item.productName,
+          item.productPrice,
           item.quantity,
           lineTotal,
         ],
@@ -382,14 +641,100 @@ export async function placeOrder(payload: CheckoutPayload) {
 
       await db.runAsync(
         "UPDATE products SET stock = stock - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-        [item.quantity, item.product_id],
+        [item.quantity, item.productId],
       );
     }
 
-    await db.runAsync("DELETE FROM cart_items");
+    if (options.clearCartAfterPlace) {
+      await db.runAsync("DELETE FROM cart_items");
+    }
   });
 
   return orderNumber;
+}
+
+async function processQueuedOrderIntentsInternal() {
+  if (!canUseWebStorage()) {
+    return { processed: 0, failed: 0, remaining: 0 };
+  }
+
+  const queue = getPendingOrderIntents();
+  if (queue.length === 0) {
+    return { processed: 0, failed: 0, remaining: 0 };
+  }
+
+  const remaining: PendingOrderIntent[] = [];
+  let processed = 0;
+  let failed = 0;
+
+  for (const intent of queue) {
+    try {
+      await placeOrderInDb(intent.payload, intent.items, {
+        clearCartAfterPlace: false,
+      });
+      processed += 1;
+    } catch {
+      failed += 1;
+      remaining.push(intent);
+    }
+  }
+
+  writePendingOrderIntents(remaining);
+  return { processed, failed, remaining: remaining.length };
+}
+
+export async function syncQueuedOrderIntents() {
+  if (isOfflineNow()) {
+    return { processed: 0, failed: 0, remaining: getPendingOrderIntentCount() };
+  }
+  return processQueuedOrderIntentsInternal();
+}
+
+export function getPendingOrderIntentCount() {
+  return getPendingOrderIntents().length;
+}
+
+export async function placeOrder(
+  payload: CheckoutPayload,
+): Promise<PlaceOrderResult> {
+  const cartItems = await getCartItems();
+
+  if (cartItems.length === 0) {
+    throw new Error("Your cart is empty.");
+  }
+
+  if (isMemoryFallbackEnabled()) {
+    const orderNumber = await placeOrderMemory(payload);
+    writeSnapshot<CartItem[]>(SNAPSHOT_KEYS.cartItems, []);
+    return { status: "placed", orderNumber };
+  }
+
+  try {
+    const orderNumber = await placeOrderInDb(
+      payload,
+      toCheckoutLines(cartItems),
+      {
+        clearCartAfterPlace: true,
+      },
+    );
+    writeSnapshot<CartItem[]>(SNAPSHOT_KEYS.cartItems, []);
+    return { status: "placed", orderNumber };
+  } catch (error) {
+    if (!isQueueableCheckoutError(error)) {
+      throw error;
+    }
+
+    const intentId = queueOrderIntent(payload, cartItems);
+
+    try {
+      await clearCart();
+    } catch {
+      // Best-effort cart cleanup for queued intents.
+      writeSnapshot<CartItem[]>(SNAPSHOT_KEYS.cartItems, []);
+    }
+
+    return { status: "queued", intentId };
+  }
 }
 
 export async function getOrderByOrderNumber(
