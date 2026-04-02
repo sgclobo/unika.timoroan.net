@@ -1,0 +1,16 @@
+# Unika Online PWA - Standard Direct Config
+# The app is now served directly from the root.
+
+DirectoryIndex index.html
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Prevent rewrites for real files
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    # Fallback to index.html for React Router / SPA logic
+    RewriteRule . index.html [L]
+</IfModule>

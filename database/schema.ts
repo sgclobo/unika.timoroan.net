@@ -111,7 +111,10 @@ async function seedData() {
       ('Electronics', 'Phones, earbuds and accessories'),
       ('Fashion', 'Trending outfits and apparel'),
       ('Groceries', 'Daily fresh and pantry essentials'),
-      ('Beauty', 'Skincare and personal care picks');
+      ('Beauty', 'Skincare and personal care picks'),
+      ('Men Clothes', 'Stylish apparel for men'),
+      ('Women Clothes', 'Elegant fashion for women'),
+      ('Office Accessories', 'Essential supplies for your workspace');
     `);
   }
 
@@ -129,7 +132,13 @@ async function seedData() {
       (2, 'Core Denim', 'Stretch denim jeans with modern slim cut.', 42.0, 'https://picsum.photos/seed/core-denim/600/600', 9, 0, 'active'),
       (3, 'Premium Rice 5kg', 'Soft and fluffy premium grain.', 16.75, 'https://picsum.photos/seed/premium-rice/600/600', 22, 0, 'active'),
       (3, 'Organic Eggs 12pcs', 'Farm fresh organic eggs.', 6.99, 'https://picsum.photos/seed/organic-eggs/600/600', 3, 1, 'active'),
-      (4, 'Hydra Glow Serum', 'Lightweight serum for daily hydration.', 21.2, 'https://picsum.photos/seed/hydra-serum/600/600', 6, 1, 'active');
+      (4, 'Hydra Glow Serum', 'Lightweight serum for daily hydration.', 21.2, 'https://picsum.photos/seed/hydra-serum/600/600', 6, 1, 'active'),
+      (5, 'Classic Oxford Shirt', 'Timeless white cotton shirt for any occasion.', 25.00, 'https://picsum.photos/seed/mens-shirt/600/600', 20, 1, 'active'),
+      (5, 'Slim Fit Chinos', 'Comfortable stretch cotton chinos in khaki.', 39.99, 'https://picsum.photos/seed/mens-chinos/600/600', 15, 0, 'active'),
+      (6, 'Floral Maxi Dress', 'Elegant summer dress with vibrant floral patterns.', 45.00, 'https://picsum.photos/seed/womens-dress/600/600', 10, 1, 'active'),
+      (6, 'Silk V-Neck Blouse', 'Luxurious silk blouse for professional or casual wear.', 29.50, 'https://picsum.photos/seed/womens-blouse/600/600', 8, 0, 'active'),
+      (7, 'Leather Desk Mat', 'Premium waterproof faux leather desk protector.', 18.50, 'https://picsum.photos/seed/desk-mat/600/600', 25, 0, 'active'),
+      (7, 'Bamboo Tablet Stand', 'Eco-friendly adjustable stand for tablets and phones.', 12.00, 'https://picsum.photos/seed/tablet-stand/600/600', 30, 1, 'active');
     `);
   }
 
